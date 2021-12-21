@@ -1,6 +1,14 @@
 version: 0.2
 
 phases:
+  install:
+    runtime-versions:
+      docker: 19
+      nodejs: 12
+    commands:
+      - pwd
+      - nohup /usr/local/bin/dockerd --host=unix:///var/run/docker.sock --host=tcp://127.0.0.1:2375 --storage-driver=overlay2 &
+      - timeout 15 sh -c "until docker info; do echo .; sleep 1; done"
   pre_build:
     commands:
       - echo Logging in to Amazon ECR...
@@ -16,3 +24,47 @@ phases:
       - echo Build completed on `date`
       - echo Pushing the Docker image...
       - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:latest
+
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      docker: 19
+      nodejs: 12
+    commands:
+      - pwd
+      - nohup /usr/local/bin/dockerd --host=unix:///var/run/docker.sock --host=tcp://127.0.0.1:2375 --storage-driver=overlay2 &
+      - timeout 15 sh -c "until docker info; do echo .; sleep 1; done"      
+  pre_build:
+    commands:
+      - echo Pre Build pams-front
+      - npm --version
+      - yarn install
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      - $(aws ecr get-login --region us-east-1 --no-include-email)
+      - REPOSITORY_URI=636468654438.dkr.ecr.us-east-1.amazonaws.com/pams-front
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-8)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+  build:
+    commands:
+      - echo Build started on `date`
+      - yarn run build
+      - echo Building the Docker image...
+      - cd docker
+      - pwd
+      - mv ../dist ./dist
+      - cat ./health.html | sed "s/release/${IMAGE_TAG}/" > ./health.tmp
+      - mv ./health.tmp ./health.html
+      - cat ./health.html
+      - docker build -t $REPOSITORY_URI:$IMAGE_TAG .
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo Writing image definitions file...
+      - printf '[{"name":"pams-front","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > ../imagedefinitions.json
+artifacts:
+    files: imagedefinitions.json
