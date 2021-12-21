@@ -1,0 +1,12 @@
+# code editors
+.idea
+.vscode
+yarn-error.log
+dist
+.env
+
+# package directories
+node_modules
+coverage
+jspm_packages
+output
